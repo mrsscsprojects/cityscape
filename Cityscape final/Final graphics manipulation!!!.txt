@@ -1,0 +1,370 @@
+from OpenGL.GL import *
+from OpenGL.GLUT import *
+from OpenGL.GLU import *
+import numpy as np
+import time
+
+# Window dimensions
+width, height = 800, 600
+
+# Time in hours
+current_time = 12.0
+
+def draw_points(x, y):
+    glBegin(GL_POINTS)
+    glVertex2i(int(x), int(y))
+    glEnd()
+
+def findZone(x0, y0, x1, y1):
+    dy = y1 - y0
+    dx = x1 - x0
+
+    if abs(dx) > abs(dy):
+        if dx > 0 and dy >= 0:
+            return 0
+        elif dx < 0 <= dy:
+            return 3
+        elif dx < 0 and dy < 0:
+            return 4
+        else:
+            return 7
+    else:
+        if dx > 0 and dy > 0:
+            return 1
+        elif dx <= 0 < dy:
+            return 2
+        elif dx < 0 and dy < 0:
+            return 5
+        else:
+            return 6
+
+def ZoneZeroConversion(zone, x, y):
+    if zone == 0:
+        return x, y
+    elif zone == 1:
+        return y, x
+    elif zone == 2:
+        return y, -x
+    elif zone == 3:
+        return -x, y
+    elif zone == 4:
+        return -x, -y
+    elif zone == 5:
+        return -y, -x
+    elif zone == 6:
+        return -y, x
+    elif zone == 7:
+        return x, -y
+
+def zero_to_original_zone(zone, x, y):
+    if zone == 0:
+        return x, y
+    if zone == 1:
+        return y, x
+    if zone == 2:
+        return -y, x
+    if zone == 3:
+        return -x, y
+    if zone == 4:
+        return -x, -y
+    if zone == 5:
+        return -y, -x
+    if zone == 6:
+        return y, -x
+    if zone == 7:
+        return x, -y
+
+def MidPointLine(zone, x0, y0, x1, y1):
+    dy = y1 - y0
+    dx = x1 - x0
+    d_init = 2 * dy - dx
+    e = 2 * dy
+    ne = 2 * (dy - dx)
+
+    x = x0
+    y = y0
+    while x <= x1:
+        a, b = zero_to_original_zone(zone, x, y)
+        draw_points(a, b)
+        if d_init <= 0:
+            x += 1
+            d_init += e
+        else:
+            x += 1
+            y += 1
+            d_init += ne
+
+def eight_way_symmetry(x0, y0, x1, y1):
+    zone = findZone(x0, y0, x1, y1)
+    z0_x0, z0_y0 = ZoneZeroConversion(zone, x0, y0)
+    z0_x1, z0_y1 = ZoneZeroConversion(zone, x1, y1)
+    MidPointLine(zone, z0_x0, z0_y0, z0_x1, z0_y1)
+
+def interpolate_color(color1, color2, factor):
+    return [color1[i] + factor * (color2[i] - color1[i]) for i in range(3)]
+
+def BackGroundColour(x):
+    if x > 24 or x < 0:
+        print("Invalid Time")
+    else:
+        if 6 <= x <= 8:
+            factor = (x - 6) / 12.0
+            top_color = [0.7, 0.5, 1.0]  # Day top color
+            bottom_color = [0.5, 0.8, 1.0]  # Day bottom color
+        elif 9 <= x <= 11:
+            factor = (x - 6) / 12.0
+            top_color = [0.4, 0.5, 1.0]  # Mid-day top color
+            bottom_color = [0.5, 0.8, 1.0]  # Mid-day bottom color        
+        elif 12 <= x <= 15:
+            factor = (x - 18) / 6.0
+            top_color = [0.0, 0.7, 1.0]  # Noon top color
+            bottom_color = [0.5, 0.8, 1.0]# Noon bottom color
+        elif 16 <= x <= 18:
+            factor = (x - 18) / 6.0
+            top_color = [1.0, 0.5, 0.0]  # Noon top color
+            bottom_color = [0.0, 0.3, 1.3]  # Noon bottom color            
+        else:
+            if x < 6:
+                factor = x / 6.0
+            else:
+                factor = (x - 18) / 6.0
+            top_color = [0.0, 0.0, 0.0]  # Night top color
+            bottom_color = [0.0, 0.0, 0.7]  # Night bottom color
+
+        glBegin(GL_QUADS)
+        glColor3f(*top_color)
+        glVertex2f(0, height)
+        glVertex2f(width, height)
+        glColor3f(*bottom_color)
+        glVertex2f(width, 0)
+        glVertex2f(0, 0)
+        glEnd()
+
+def draw_building(x0, y0, width, height, color):
+    glColor3f(*color)  # Building color
+    glBegin(GL_POLYGON)
+    glVertex2f(x0, y0)
+    glVertex2f(x0, y0 + height)
+    glVertex2f(x0 + width, y0 + height)
+    glVertex2f(x0 + width, y0)
+    glEnd()
+
+    # Draw windows
+    glColor3f(0.8, 0.8, 0.8)  # Window color
+    for i in range(10, height - 10, 30):
+        for j in range(10, width - 10, 30):
+            glBegin(GL_POLYGON)
+            glVertex2f(x0 + j, y0 + i)
+            glVertex2f(x0 + j + 20, y0 + i)
+            glVertex2f(x0 + j + 20, y0 + i + 20)
+            glVertex2f(x0 + j, y0 + i + 20)
+            glEnd()
+
+    # Draw door
+    glColor3f(0.4, 0.2, 0.0)  # Door color
+    glBegin(GL_POLYGON)
+    glVertex2f(x0 + width / 2 - 15, y0)
+    glVertex2f(x0 + width / 2 - 15, y0 + 40)
+    glVertex2f(x0 + width / 2 + 15, y0 + 40)
+    glVertex2f(x0 + width / 2 + 15, y0)
+    glEnd()
+
+    # Draw roof
+    glColor3f(0.3, 0.1, 0.1)  # Roof color
+    glBegin(GL_TRIANGLES)
+    glVertex2f(x0 - 10, y0 + height)
+    glVertex2f(x0 + width / 2, y0 + height + 30)
+    glVertex2f(x0 + width + 10, y0 + height)
+    glEnd()
+
+    # Additional architectural details
+    # Balconies
+    for i in range(50, height, 100):
+        glColor3f(0.5, 0.5, 0.5)
+        glBegin(GL_POLYGON)
+        glVertex2f(x0 + 10, y0 + i)
+        glVertex2f(x0 + 10, y0 + i + 10)
+        glVertex2f(x0 + width - 10, y0 + i + 10)
+        glVertex2f(x0 + width - 10, y0 + i)
+        glEnd()
+
+def draw_tree(x0, y0):
+    glColor3f(0.5, 0.35, 0.05)  # Brown color for trunk
+    glBegin(GL_POLYGON)
+    glVertex2f(x0, y0)
+    glVertex2f(x0, y0 + 40)
+    glVertex2f(x0 + 10, y0 + 40)
+    glVertex2f(x0 + 10, y0)
+    glEnd()
+
+    # Draw the leaves
+    glColor3f(0.0, 0.8, 0.0)  # Green color for leaves
+    draw_circle(x0 + 5, y0 + 50, 15)  # Bottom layer
+    draw_circle(x0 - 5, y0 + 45, 15)
+    draw_circle(x0 + 15, y0 + 45, 15)
+    draw_circle(x0 + 5, y0 + 60, 13)  # Middle layer
+    draw_circle(x0 - 5, y0 + 55, 13)
+    draw_circle(x0 + 15, y0 + 55, 13)
+    draw_circle(x0 + 5, y0 + 70, 10)  # Top layer
+    draw_circle(x0 - 5, y0 + 65, 10)
+    draw_circle(x0 + 15, y0 + 65, 10)
+
+def draw_circle(cx, cy, radius):
+    num_segments = 100
+    theta = 2 * np.pi / num_segments
+    c = np.cos(theta)
+    s = np.sin(theta)
+    x = radius
+    y = 0
+
+    glBegin(GL_POLYGON)
+    for _ in range(num_segments):
+        glVertex2f(x + cx, y + cy)
+        t = x
+        x = c * x - s * y
+        y = s * t + c * y
+    glEnd()
+
+def draw_sun_and_moon(time):
+    if 6 <= time <= 9:
+        # Sun during the day
+        sun_position = (time - 6) / 12 * width
+        glColor3f(1.0, 1.0, 0.6) # Lighter yellow for edges
+        draw_circle(sun_position, height - 50, 30)
+    if 9 <= time <= 11:
+        # Sun during the mid-day
+        sun_position = (time - 6) / 12 * width
+        glColor3f(1.0, 1.0, 0.8) # Light Yellow color for the sun (mid-day)
+        draw_circle(sun_position, height - 50, 30)
+    if 12 <= time <= 15:
+        # Sun during the afternoon
+        sun_position = (time - 6) / 12 * width
+        glColor3f(1.0, 1.0, 0.0) # Bright Yellow color for the sun (noon)
+        draw_circle(sun_position, height - 50, 30)
+    if 16 <= time <= 18:
+        # Sun during the evening
+        sun_position = (time - 6) / 12 * width
+        glColor3f(1.0, 0.6, 0.3) # Orange for top
+        draw_circle(sun_position, height - 50, 30)
+    else:
+        # Moon during the night
+        if time >= 18:
+            moon_position = (time - 18) / 12 * width
+        else:
+            moon_position = (time + 6) / 12 * width
+        glColor3f(1.0, 1.0, 1.0)  # White color for the moon
+        draw_circle(moon_position, height - 50, 30)
+
+def draw_cloud(cx, cy):
+    glColor3f(1.0, 1.0, 1.0)  # White color for clouds
+    
+    # Main body of the cloud
+    draw_circle(cx, cy, 20)
+    draw_circle(cx + 25, cy, 20)
+    draw_circle(cx + 50, cy, 20)
+    draw_circle(cx + 12.5, cy + 15, 20)
+    draw_circle(cx + 37.5, cy + 15, 20)
+    draw_circle(cx + 25, cy + 30, 15)
+    draw_circle(cx + 50, cy + 10, 15)
+    draw_circle(cx, cy + 10, 15)
+    draw_circle(cx + 50, cy + 25, 15)
+    
+    # Additional circles to cloud
+    draw_circle(cx - 10, cy, 15)  # Left side
+    draw_circle(cx + 60, cy, 15)  # Right side
+    draw_circle(cx + 25, cy - 10, 15)  # Bottom middle
+    draw_circle(cx + 37.5, cy - 10, 10)  # Bottom right
+    draw_circle(cx + 12.5, cy - 10, 10)  # Bottom left
+    draw_circle(cx + 25, cy + 45, 10)  # Top middle
+    draw_circle(cx + 37.5, cy + 40, 10)  # Top right
+    draw_circle(cx + 12.5, cy + 40, 10)  # Top left
+
+
+def draw_stars():
+    glColor3f(1.0, 1.0, 1.0)  # White color for stars
+    for _ in range(50):
+        x = np.random.randint(0, width)
+        y = np.random.randint(height // 1.8, height)
+        draw_circle(x, y, 2)
+
+def draw_timestamp(time):
+    time_str = f"Time: {int(time)}:00"
+    glColor3f(1.0, 1.0, 1.0)  # White color for the text
+    glRasterPos2f(10, height - 20)
+    for char in time_str:
+        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, ord(char))
+
+def display():
+    glClear(GL_COLOR_BUFFER_BIT)
+    BackGroundColour(current_time)
+
+    # Draw buildings with different colors and details
+    draw_building(50, 0, 50, 250, (0.6, 0.3, 0.3))  # Building 1
+    draw_building(150, 0, 100, 150, (0.3, 0.6, 0.3))  # Building 2
+    draw_building(300, 0, 50, 200, (0.3, 0.3, 0.6))  # Building 3
+    draw_building(400, 0, 50, 230, (0.6, 0.6, 0.3))  # Building 4
+    draw_building(500, 0, 50, 280, (0.3, 0.6, 0.6))  # Building 5
+    draw_building(600, 0, 50, 300, (0.6, 0.3, 0.6))  # Building 6
+    draw_building(200, 0, 150, 300, (0.6, 0.6, 0.6))  # Building 7
+
+    # Draw trees
+    draw_tree(70, 0)
+    draw_tree(170, 0)
+    draw_tree(370, 0)
+    draw_tree(570, 0)
+    draw_tree(670, 0)
+
+    # Draw sun or moon based on the time
+    draw_sun_and_moon(current_time)
+
+    # Draw clouds during the day
+    if 6 <= current_time < 18:
+        draw_cloud(100, height - 100)
+        draw_cloud(400, height - 150)
+        draw_cloud(600, height - 100)
+
+    # Draw stars at night
+    if current_time < 6 or current_time >= 18:
+        draw_stars()
+    
+    # Draw timestamp
+    draw_timestamp(current_time)
+
+    glFlush()
+
+def init():
+    glClearColor(0.0, 0.0, 0.0, 1.0)
+    gluOrtho2D(0, width, 0, height)
+
+def timer(value):
+    global current_time
+    current_time += 0.01
+    if current_time >= 24.0:
+        current_time = 0.0
+    glutPostRedisplay()
+    glutTimerFunc(100, timer, 0)
+
+def main():
+    global current_time
+
+    # User input for time
+    time_input = input("Enter the time in hours (0-24): ")
+    try:
+        current_time = float(time_input)
+        if current_time < 0 or current_time > 24:
+            print("Invalid input. Defaulting to noon (12.0).")
+            current_time = 12.0
+    except ValueError:
+        print("Invalid input. Defaulting to noon (12.0).")
+        current_time = 12.0
+
+    glutInit()
+    glutInitDisplayMode(GLUT_SINGLE | GLUT_RGB)
+    glutInitWindowSize(width, height)
+    glutCreateWindow(b"Cityscape with Sun and Moon")
+    init()
+    glutDisplayFunc(display)
+    glutMainLoop()
+
+if __name__ == "__main__":
+    main()
